@@ -1,0 +1,58 @@
+# ---- Credentials: never commit, never ship ----
+.env
+.env.local
+.env.*.local
+18.env
+ecoquest.env
+*.pem
+*.key
+
+# ---- Local runtime state ----
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vercel/
+venv/
+.venv/
+
+# ---- Development scratch: temporary scripts and work artifacts ----
+# These are one-off debugging scripts and extracted file dumps. They are not
+# part of the product and are intentionally kept out of the repository.
+_work/
+_backup/
+_baseline_candidate/
+_shots/
+__pycache__/
+验收截图/
+outputs/
+
+# Design handoff package: task briefs and reference images used during
+# development, not product source.
+Ecoquest-Cursor设计交接包/
+
+# Runtime cache, regenerated on first fetch. The bundled snapshot is kept.
+news-cache.json
+
+# Scratch scripts in the project root (_fix_*.py, _make_*.py, _check_*.py, ...)
+# Anchored to the root so that files like vercel_app/api/_ecoquest.py are kept.
+/_*.py
+/_*.pyc
+_srv.log
+_srv.err
+
+# ---- Backups and packaged copies ----
+Ecoquest-Source.zip
+Ecoquest-Climate-Atlas-原版备份-*.html
+Ecoquest-Climate-Atlas-改前备份-*.html
+Ecoquest-Climate-Atlas-身份新闻更新前-*.html
+*_备份_*
+*备份*
+
+# ---- OS / editor noise ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
+.idea/
