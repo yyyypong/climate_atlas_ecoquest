@@ -214,18 +214,29 @@ h1,h2,.brand,.delegate-name,.standings-title,.dice-result-label,.dice-tray-copy 
   position:absolute;left:0;top:0;width:calc(var(--die-z,44px) * 2);height:calc(var(--die-z,44px) * 2);
   margin:calc(var(--die-z,44px) * -1) 0 0 calc(var(--die-z,44px) * -1);
   transform-style:preserve-3d;will-change:transform;
-  filter:drop-shadow(0 6px 8px rgba(0,0,0,.24));
+  /* No filter on the cube. A filter is a grouping property: it flattens the 3D
+     rendering context, so preserve-3d is defeated, backface-visibility stops
+     hiding the far faces, and all six faces collapse onto a single plane.
+     The die then reads as a flat card instead of a cube. The shadow is cast
+     by the table contact shadow and by the shading on each face. */
 }
 .dice-face{
-  position:absolute;inset:0;background:linear-gradient(145deg,#f7f2e7,#ebe3d2);
+  position:absolute;inset:0;background:linear-gradient(145deg,#f8f3e8,#eae2d0);
   border-radius:12px;border:1px solid #d2c4a8;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(80,60,30,.08);
   backface-visibility:hidden;
 }
-.dice-face .pips{position:absolute;inset:14%;display:grid}
+/* Face shading. The darkening is driven from JS with the face's real
+   orientation, so the light stays in the room instead of riding along
+   with the die as it spins. */
+.dice-face::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:#22332b;opacity:var(--shade,0);z-index:0;
+}
+.dice-face .pips{position:absolute;inset:14%;display:grid;z-index:1}
 .dice-face .pip{
-  width:9px;height:9px;border-radius:50%;background:#2a2926;
-  box-shadow:inset 0 1px 1px rgba(255,255,255,.28),0 1px 1px rgba(0,0,0,.12);
+  width:9px;height:9px;border-radius:50%;background:#211f1c;
+  box-shadow:inset 0 1.5px 2px rgba(0,0,0,.55),inset 0 -1px 1.5px rgba(255,255,255,.42);
   justify-self:center;align-self:center;
 }
 .pips.n1{place-items:center}
@@ -2167,9 +2178,10 @@ function dieProfile(pts,f){
  }
  return pts[pts.length-1][1];
 }
-function dieFace(n){
+function dieFace(n,shade){
  const count=Math.max(1,Math.min(6,n|0));
- return '<div class="dice-face face-'+count+'"><div class="pips n'+count+'">'+Array.from({length:count},()=>'<i class="pip"></i>').join('')+'</div></div>';
+ const style=shade==null?'':' style="--shade:'+shade.toFixed(3)+'"';
+ return '<div class="dice-face face-'+count+'"'+style+'><div class="pips n'+count+'">'+Array.from({length:count},()=>'<i class="pip"></i>').join('')+'</div></div>';
 }
 function dieSettle(n){
  const i=Math.max(1,Math.min(6,n|0));
@@ -2179,6 +2191,45 @@ function dieTransform(n,thr,thx,thy){
  const i=Math.max(1,Math.min(6,n|0));
  return 'rotateZ('+(thr/DIE_DEG).toFixed(3)+'deg) rotateX('+(thx/DIE_DEG).toFixed(3)+'deg) rotateY('+(thy/DIE_DEG).toFixed(3)
   +'deg) rotateZ('+DIE_YAW[i]+'deg) '+(DIE_ORIENT[i]||'');
+}
+// ---------- face lighting ----------
+// A die only reads as a solid object when the light stays in the room while
+// the die moves, so every face is shaded from its real orientation inside
+// the table's frame.  The key light sits above and to the left, a dimmer
+// fill comes from the right, and the ambient term grows for upward faces.
+const DIE_LIGHT={key:[-0.45,-0.30,0.84],fill:[0.78,-0.18,0.28]};
+function dieVec(m,v){
+ return [m[0][0]*v[0]+m[0][1]*v[1]+m[0][2]*v[2],
+         m[1][0]*v[0]+m[1][1]*v[1]+m[1][2]*v[2],
+         m[2][0]*v[0]+m[2][1]*v[1]+m[2][2]*v[2]];
+}
+function dieShade(normal){
+ const n=normal;
+ const ambient=0.30+0.14*Math.max(0,n[2]);
+ const key=0.80*Math.max(0,n[0]*DIE_LIGHT.key[0]+n[1]*DIE_LIGHT.key[1]+n[2]*DIE_LIGHT.key[2]);
+ const fill=0.30*Math.max(0,n[0]*DIE_LIGHT.fill[0]+n[1]*DIE_LIGHT.fill[1]+n[2]*DIE_LIGHT.fill[2]);
+ const lit=ambient+key+fill;
+ return Math.min(0.50,Math.max(0.02,0.46-lit*0.42));
+}
+// Orientation of the cube at a given point in the throw, in table space.
+function dieCubeMatrix(value,thr,thx,thy){
+ const i=Math.max(1,Math.min(6,value|0));
+ const yaw=DIE_YAW[i]*DIE_DEG;
+ return dieMul(dieRz(thr),dieMul(dieRx(thx),dieMul(dieRy(thy),dieMul(dieRz(yaw),DIE_MAT[i]))));
+}
+// Shade the six face elements from the cube's current orientation.
+function dieApplyShade(faces,matrix){
+ for(const face of faces){
+  const n=parseInt(face.className.replace('dice-face face-',''),10)||1;
+  const col=dieVec(matrix,DIE_NORMAL[n]);
+  const len=Math.hypot(col[0],col[1],col[2])||1;
+  face.style.setProperty('--shade',dieShade([col[0]/len,col[1]/len,col[2]/len]).toFixed(3));
+ }
+}
+function dieShadeOf(matrix,face){
+ const col=dieVec(matrix,DIE_NORMAL[face]);
+ const len=Math.hypot(col[0],col[1],col[2])||1;
+ return dieShade([col[0]/len,col[1]/len,col[2]/len]);
 }
 // The tumbling: the angular velocity decays linearly to exactly zero and the
 // total rotation is a whole number of turns, so the die comes to rest on the
@@ -2209,7 +2260,8 @@ function dieMotion(n,h){
 }
 function dieMarkup(n=1){
  const i=Math.max(1,Math.min(6,n|0));
- const faces=[1,2,3,4,5,6].map(dieFace).join('');
+ const settled=dieCubeMatrix(i,0,0,0);
+ const faces=[1,2,3,4,5,6].map(f=>dieFace(f,dieShadeOf(settled,f))).join('');
  return '<div class="die-scene"><div class="die-world">'
   +'<div class="die-desk"></div><div class="die-shadow"></div>'
   +'<div class="die-flight"><div class="die-cube" style="transform:'+dieSettle(i)+'" data-face="'+i+'">'+faces+'</div></div>'
@@ -2231,14 +2283,27 @@ function playDieThrow(cube,flight,shadow,value){
   return {transform:'translate3d('+fr.x.toFixed(2)+'px,'+fr.y.toFixed(2)+'px,1px) scale('+sc.toFixed(3)+')',opacity:(0.34*sc).toFixed(3)};
  });
  let running=[];
+ const faces=[...cube.querySelectorAll('.dice-face')];
+ // The light is fixed in the room, so the shading is repainted frame by
+ // frame from the cube's real orientation while it tumbles.
+ let paint=0;
+ const paintShade=()=>{
+  const fr=frames[Math.min(paint,frames.length-1)];
+  dieApplyShade(faces,dieCubeMatrix(value,fr.thr,fr.thx,fr.thy));
+  paint++;
+  if(paint<frames.length)requestAnimationFrame(paintShade);
+ };
  try{running=[flight.animate(flightKeys,timing),cube.animate(cubeKeys,timing),shadow.animate(shadowKeys,timing)];}
  catch(err){console.warn('dice animation unavailable',err);}
+ if(running.length)requestAnimationFrame(paintShade);
+ else dieApplyShade(faces,dieCubeMatrix(value,0,0,0));
  const done=running.length?Promise.all(running.map(a=>a.finished)).catch(()=>{}):Promise.resolve();
  return done.then(()=>{
   cube.style.transform=dieSettle(value);
   flight.style.transform='translate3d('+DIE_REST[0]+'px,'+DIE_REST[1]+'px,'+h+'px)';
   shadow.style.transform='translate3d('+DIE_REST[0]+'px,'+DIE_REST[1]+'px,1px) scale(1)';
   shadow.style.opacity='.34';
+  dieApplyShade(faces,dieCubeMatrix(value,0,0,0));
   running.forEach(a=>{try{a.cancel();}catch(err){}});
  });
 }

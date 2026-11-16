@@ -27,6 +27,9 @@ __pycache__/
 验收截图/
 outputs/
 
+# Screen-recording harness and its rendered videos (tens of megabytes).
+record/
+
 # Design handoff package: task briefs and reference images used during
 # development, not product source.
 Ecoquest-Cursor设计交接包/
